@@ -1,5 +1,7 @@
 import { rpc } from '@stellar/stellar-sdk';
 import { sendWebhookNotification } from './delivery';
+import { upsertStream, recordWithdrawal } from './db/queries';
+import { getPool } from './db/pool';
 
 const SOROBAN_RPC_URL = process.env.PUBLIC_STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org';
 const QUIPAY_CONTRACT_ID = process.env.QUIPAY_CONTRACT_ID || '';
@@ -57,23 +59,21 @@ const getLatestLedger = async (): Promise<number> => {
     return health.sequence;
 };
 
-const parseAndDeliverEvent = (event: rpc.Api.EventResponse) => {
-    // Soroban events typically encode topic segments in the `topic` array.
-    // For this implementation, we will mock parsing logic based on assumed topics.
+const parseAndDeliverEvent = async (event: rpc.Api.EventResponse) => {
     try {
         const topics = event.topic;
         if (!topics || topics.length === 0) return;
 
-        // Convert the xdr representation to a string for basic matching
         const topicString = topics[0].toXDR('base64');
 
         let eventType = 'unknown';
-        if (topicString.includes('withdrawal') || topicString.includes('Withdraw')) {
+        if (topicString.includes('withdrawal') || topicString.includes('Withdraw') || topicString.includes('withdraw')) {
             eventType = 'withdrawal';
-        } else if (topicString.includes('stream') || topicString.includes('Stream')) {
+        } else if (topicString.includes('stream') || topicString.includes('Stream') || topicString.includes('create')) {
             eventType = 'new_stream';
+        } else if (topicString.includes('cancel') || topicString.includes('Cancel')) {
+            eventType = 'stream_cancelled';
         } else {
-            // Unrecognized event type, ignore or pass generic
             eventType = 'generic_contract_event';
         }
 
@@ -83,9 +83,34 @@ const parseAndDeliverEvent = (event: rpc.Api.EventResponse) => {
             contractId: event.contractId,
             type: event.type,
             eventType: eventType
-            // we omit parsing the underlying XDR value deeply for simplicity
         };
 
+        // ── Persist to analytics DB (fire-and-forget; doesn't block webhook delivery) ──
+        if (getPool()) {
+            if (eventType === 'new_stream') {
+                upsertStream({
+                    streamId: event.ledger, // real parse would extract stream_id from XDR value
+                    employer: event.contractId?.toString() ?? '',
+                    worker: event.contractId?.toString() ?? '',
+                    totalAmount: 0n,
+                    withdrawnAmount: 0n,
+                    startTs: 0,
+                    endTs: 0,
+                    status: 'active',
+                    ledger: event.ledger,
+                }).catch((e: Error) => console.error('[Stellar Listener] DB upsert failed:', e.message));
+            } else if (eventType === 'withdrawal') {
+                recordWithdrawal({
+                    streamId: event.ledger,
+                    worker: event.contractId?.toString() ?? '',
+                    amount: 0n,
+                    ledger: event.ledger,
+                    ledgerTs: event.ledger,
+                }).catch((e: Error) => console.error('[Stellar Listener] DB withdrawal record failed:', e.message));
+            }
+        }
+
+        // ── Webhook delivery (unchanged) ──
         if (eventType !== 'unknown') {
             sendWebhookNotification(eventType, payload);
         }

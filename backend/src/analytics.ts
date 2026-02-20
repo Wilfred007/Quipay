@@ -104,7 +104,7 @@ analyticsRouter.get('/trends', async (req: Request, res: Response) => {
  * GET /analytics/employers/:address
  * Stats for a specific employer address.
  */
-analyticsRouter.get('/employers/:address', async (req: Request, res: Response) => {
+analyticsRouter.get('/employers/:address', async (req: Request<{ address: string }>, res: Response) => {
     try {
         const { address } = req.params;
         const { data, ms } = await timed(() => getAddressStats(address));
@@ -121,7 +121,7 @@ analyticsRouter.get('/employers/:address', async (req: Request, res: Response) =
  * GET /analytics/workers/:address
  * Stats for a specific worker address.
  */
-analyticsRouter.get('/workers/:address', async (req: Request, res: Response) => {
+analyticsRouter.get('/workers/:address', async (req: Request<{ address: string }>, res: Response) => {
     try {
         const { address } = req.params;
         const { data, ms } = await timed(() => getAddressStats(address));

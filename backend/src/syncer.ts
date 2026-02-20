@@ -68,8 +68,8 @@ const ingestEvents = async (events: rpc.Api.EventResponse[]): Promise<void> => {
                 // can be enriched by the live listener when data is available.
                 await upsertStream({
                     streamId: event.ledger, // placeholder until real XDR decode
-                    employer: event.contractId,
-                    worker: event.contractId,
+                    employer: event.contractId?.toString() ?? '',
+                    worker: event.contractId?.toString() ?? '',
                     totalAmount: 0n,
                     withdrawnAmount: 0n,
                     startTs: 0,
@@ -80,7 +80,7 @@ const ingestEvents = async (events: rpc.Api.EventResponse[]): Promise<void> => {
             } else if (parsed.kind === 'withdrawal') {
                 await recordWithdrawal({
                     streamId: event.ledger,
-                    worker: event.contractId,
+                    worker: event.contractId?.toString() ?? '',
                     amount: 0n,
                     ledger: event.ledger,
                     ledgerTs: event.ledger, // ledger timestamp approximation
@@ -88,8 +88,8 @@ const ingestEvents = async (events: rpc.Api.EventResponse[]): Promise<void> => {
             } else if (parsed.kind === 'stream_cancelled') {
                 await upsertStream({
                     streamId: event.ledger,
-                    employer: event.contractId,
-                    worker: event.contractId,
+                    employer: event.contractId?.toString() ?? '',
+                    worker: event.contractId?.toString() ?? '',
                     totalAmount: 0n,
                     withdrawnAmount: 0n,
                     startTs: 0,
